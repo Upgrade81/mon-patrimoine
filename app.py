@@ -3,86 +3,57 @@ import yfinance as yf
 import pandas as pd
 import plotly.express as px
 
-# --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="Mon Dashboard Patrimoine", layout="wide")
-st.title("📈 Mon Patrimoine en Temps Réel")
+st.set_page_config(page_title="Mon Portfolio PEA", layout="wide")
 
-# --- 1. TES DONNÉES (Version Corrigée) ---
+# 1. Données brutes (PRU et Quantités conformes à ton relevé)
 data = {
-    'Enveloppe': ['PEA', 'PEA', 'PEA', 'PEA'],
-    'Nom': [
-        'Amundi MSCI World Swap', 
-        'Amundi PEA MSCI Europe', 
-        'BNPP Easy S&P 500 PEA', 
-        'iShares MSCI Wld Swap PEA'
-    ],
-    'Ticker': [
-        'CW8.PA',     # Amundi World (Prix attendu ~595€)
-        'MSE.PA',    # Amundi Europe (Correspond au code FR0013412038, prix attendu ~35€)
-        'ESE.PA',     # BNPP S&P 500 (Fonctionne déjà à ~28€)
-        'WPEA.PA'     # iShares World (Fonctionne déjà à ~5.99€)
-    ],
+    'Ticker': ['CW8.PA', 'PMEU.PA', 'ESE.PA', 'WPEA.PA'],
+    'Nom': ['Amundi World', 'Amundi Europe', 'BNPP S&P 500', 'iShares World'],
     'Quantité': [21, 683, 4380, 1995],
     'PRU': [477.41, 29.345, 25.8452, 5.0873]
 }
 
-
-
 df = pd.DataFrame(data)
 
-# --- 2. SYNCHRONISATION LIVE ---
-st.sidebar.header("Paramètres")
-refresh = st.sidebar.button("Rafraîchir les cours")
+# 2. Fonction de récupération du prix en temps réel
+def get_live_price(ticker):
+    try:
+        t = yf.Ticker(ticker)
+        # Tentative 1 : Prix direct
+        price = t.fast_info['last_price']
+        # Tentative 2 : Si Tentative 1 échoue ou renvoie 0
+        if price is None or price < 0.1:
+            hist = t.history(period="1d")
+            price = hist['Close'].iloc[-1]
+        return price
+    except:
+        return 0
 
-@st.cache_data(ttl=60) # Rafraîchit les données toutes les 60 secondes
-def get_live_prices(tickers):
-    prices = {}
-    for t in tickers:
-        try:
-            stock = yf.Ticker(t)
-            # Récupère le dernier prix de clôture
-            prices[t] = stock.fast_info['last_price']
-        except:
-            prices[t] = 0
-    return prices
+# 3. Calculs
+with st.spinner('Actualisation des cours en direct...'):
+    df['Prix Actuel'] = df['Ticker'].apply(get_live_price)
+    df['Valeur Totale'] = df['Quantité'] * df['Prix Actuel']
+    df['Plus-Value'] = df['Valeur Totale'] - (df['Quantité'] * df['PRU'])
+    df['Perf %'] = (df['Plus-Value'] / (df['Quantité'] * df['PRU'])) * 100
 
-try:
-    with st.spinner('Récupération des cours en direct...'):
-        live_prices = get_live_prices(df['Ticker'].tolist())
-    
-    # Calculs automatiques
-    df['Prix Actuel'] = df['Ticker'].map(live_prices)
-    df['Valeur Totale'] = df['Prix Actuel'] * df['Quantité']
-    df['Plus-Value'] = (df['Prix Actuel'] - df['PRU']) * df['Quantité']
-    df['Perf %'] = ((df['Prix Actuel'] - df['PRU']) / df['PRU']) * 100
+total_portefeuille = df['Valeur Totale'].sum()
+total_gain_abs = df['Plus-Value'].sum()
 
-    # --- 3. AFFICHAGE DES INDICATEURS CLÉS ---
-    total_patrimoine = df['Valeur Totale'].sum()
-    total_pv = df['Plus-Value'].sum()
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Valeur Totale", f"{total_patrimoine:,.2f} €")
-    col2.metric("Plus-Value Globale", f"{total_pv:,.2f} €", delta=f"{total_pv:,.2f}")
-    col3.metric("Performance Moyenne", f"{(total_pv/(total_patrimoine-total_pv)*100):.2f} %")
+# 4. Affichage du Dashboard
+st.title("📈 Suivi PEA Temps Réel")
 
-    # --- 4. VISUALISATION ---
-    st.divider()
-    c1, c2 = st.columns([2, 1])
-    
-    with c1:
-        st.write("### Détail de mes positions")
-        # Formatage pour une lecture propre
-        st.dataframe(df.style.format({
-            'Prix Actuel': '{:.2f} €',
-            'Valeur Totale': '{:.2f} €',
-            'Plus-Value': '{:.2f} €',
-            'Perf %': '{:.2f} %'
-        }), use_container_width=True)
+col1, col2 = st.columns(2)
+col1.metric("Valeur Totale", f"{total_portefeuille:,.2f} €".replace(',', ' '))
+col2.metric("Plus-Value Totale", f"{total_gain_abs:,.2f} €".replace(',', ' '), f"{ (total_gain_abs/(total_portefeuille-total_gain_abs)*100):.2f}%")
 
-    with c2:
-        st.write("### Répartition par Enveloppe")
-        fig = px.pie(df, values='Valeur Totale', names='Enveloppe', hole=0.4)
-        st.plotly_chart(fig, use_container_width=True)
+st.dataframe(df.style.format({
+    'PRU': '{:.4f} €',
+    'Prix Actuel': '{:.3f} €',
+    'Valeur Totale': '{:.2f} €',
+    'Plus-Value': '{:.2f} €',
+    'Perf %': '{:.2f}%'
+}), use_container_width=True)
 
-except Exception as e:
-    st.error(f"Erreur lors de la synchronisation : {e}")
+# Graphique de répartition
+fig = px.pie(df, values='Valeur Totale', names='Nom', title="Répartition du Portefeuille")
+st.plotly_chart(fig)
