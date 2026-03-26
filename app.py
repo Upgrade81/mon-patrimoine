@@ -18,7 +18,7 @@ data = {
     ],
     'Ticker': [
         'CW8.PA',     # Amundi World (Prix attendu ~595€)
-        'MSEU.PA',    # Amundi Europe (Correspond au code FR0013412038, prix attendu ~35€)
+        'MSE.PA',    # Amundi Europe (Correspond au code FR0013412038, prix attendu ~35€)
         'ESE.PA',     # BNPP S&P 500 (Fonctionne déjà à ~28€)
         'WPEA.PA'     # iShares World (Fonctionne déjà à ~5.99€)
     ],
