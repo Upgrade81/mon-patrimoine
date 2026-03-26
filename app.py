@@ -18,7 +18,7 @@ data = {
     ],
         'Ticker': [
         'CW8.PA',     # Amundi World (Fonctionne déjà)
-        'MEUD.PA',      # Amundi Europe (Ticker corrigé pour Bourse de Paris)
+        'PMEU.PA',      # Amundi Europe (Ticker corrigé pour Bourse de Paris)
         'ESE.PA',     # BNPP S&P 500 (Fonctionne déjà)
         'WPEA.PA'     # iShares World Swap PEA (Le ticker le plus fiable pour ton ISIN)
     ],
