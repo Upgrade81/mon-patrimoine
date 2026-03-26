@@ -12,25 +12,20 @@ data = {
     'Enveloppe': ['PEA', 'PEA', 'PEA', 'PEA'],
     'Nom': [
         'Amundi MSCI World Swap', 
-        'Amundi MSCI Europe PEA', 
+        'Amundi PEA MSCI Europe', 
         'BNPP Easy S&P 500 PEA', 
         'iShares MSCI Wld Swap PEA'
     ],
-        'Ticker': [
-        'CW8.PA',     # Amundi World (Fonctionne déjà)
-        'PMEU.PA',      # Amundi Europe (Ticker corrigé pour Bourse de Paris)
-        'ESE.PA',     # BNPP S&P 500 (Fonctionne déjà)
-        'WPEA.PA'     # iShares World Swap PEA (Le ticker le plus fiable pour ton ISIN)
+    'Ticker': [
+        'CW8.BN',     # Amundi World (Version Euronext Milan, plus stable sur Yahoo)
+        'PMEU.F',     # Amundi Europe (Version Francfort, affiche bien ~35€)
+        'ESE.PA',     # BNPP S&P 500 (Fonctionne déjà bien à ~28€)
+        'WPEA.PA'     # iShares World (Fonctionne déjà bien à ~5.99€)
     ],
-    
     'Quantité': [21, 683, 4380, 1995],
-    'PRU': [
-        477.41,   # World
-        29.345,   # Europe
-        25.8452,  # S&P 500
-        5.0873    # iShares
-    ]
+    'PRU': [477.41, 29.345, 25.8452, 5.0873]
 }
+
 
 
 df = pd.DataFrame(data)
