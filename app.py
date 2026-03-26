@@ -65,7 +65,7 @@ st.caption(f"Dernière actualisation : **{now}**")
 
 total_v = df['Valeur Totale'].sum()
 total_g = df['Plus-Value'].sum()
-perf_globale = (total_g / (total_v - total_g)) * 100
+perf_globale = (total_g / (total_v - total_g)) * 100 if total_v != total_g else 0
 
 def format_val(val, suffix="€"):
     if mode_discret:
@@ -79,25 +79,32 @@ c3.metric("Performance Globale", f"{perf_globale:.2f} %")
 
 st.divider()
 
-# --- TABLEAU FORMATE ---
-# Copie pour affichage afin de ne pas casser les calculs
+# --- TABLEAU FORMATE AVEC COULEURS ---
+def style_perf(val):
+    color = '#ff4b4b' if '-' in str(val) else '#09ab3b'
+    return f'color: {color}; font-weight: bold'
+
 display_df = df.copy()
+
+# Formatage des colonnes (on garde Perf % brut pour le style puis on le formate)
 if mode_discret:
     cols_to_hide = ['PRU', 'Prix Actuel', 'Valeur Totale', 'Plus-Value']
     for col in cols_to_hide:
         display_df[col] = "********"
 else:
-    # Formatage classique
     display_df['PRU'] = display_df['PRU'].map('{:.2f} €'.format)
     display_df['Prix Actuel'] = display_df['Prix Actuel'].map('{:.2f} €'.format)
     display_df['Valeur Totale'] = display_df['Valeur Totale'].map('{:.2f} €'.format)
     display_df['Plus-Value'] = display_df['Plus-Value'].map('{:.2f} €'.format)
 
-display_df['Perf %'] = display_df['Perf %'].map('{:.2f} %'.format)
+# Application du style sur Perf % avant le formatage texte
+st.dataframe(
+    display_df.style.applymap(style_perf, subset=['Perf %'])
+    .format({'Perf %': '{:.2f} %'}), 
+    use_container_width=True
+)
 
-st.dataframe(display_df, use_container_width=True)
-
-# Graphique (On masque les chiffres dans le graphique si mode discret)
+# Graphique
 fig = px.pie(df, values='Valeur Totale', names='Nom', hole=0.4, title="Répartition du Portefeuille")
 if mode_discret:
     fig.update_traces(textinfo='none', hovertemplate=None)
