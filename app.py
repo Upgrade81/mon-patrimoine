@@ -16,22 +16,31 @@ data = {
 }
 df = pd.DataFrame(data)
 
-# 2. Fonction de secours pour Amundi Europe via Boursorama
-def get_pmeu_price():
+# 2. Fonction de récupération robuste via Boursorama
+def get_boursorama_price(ticker):
+    # Mapping des tickers vers les codes Boursorama
+    codes = {
+        'CW8.PA': '1rPCW8',
+        'PMEU.PA': '1rPMEU'
+    }
     try:
-        url = "https://www.boursorama.com/bourse/trackers/cours/1rPMEU/"
+        url = f"https://www.boursorama.com/bourse/trackers/cours/{codes[ticker]}/"
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
-        # On cherche la balise qui contient le cours actuel
         price_tag = soup.find("span", {"class": "c-instrument c-instrument--last"})
         return float(price_tag.text.replace(" ", ""))
     except:
-        return 35.265 # Prix de secours si Boursorama bloque
+        # Valeurs de secours si Boursorama est indisponible
+        fallback = {'CW8.PA': 595.50, 'PMEU.PA': 35.265}
+        return fallback.get(ticker, 0)
 
 def get_live_price(ticker):
-    if ticker == 'PMEU.PA':
-        return get_pmeu_price()
+    # Pour les deux lignes Amundi qui buggent sur Yahoo
+    if ticker in ['CW8.PA', 'PMEU.PA']:
+        return get_boursorama_price(ticker)
+    
+    # Pour les autres (BNPP et iShares) qui fonctionnent bien sur Yahoo
     try:
         t = yf.Ticker(ticker)
         price = t.fast_info['last_price']
@@ -43,7 +52,7 @@ def get_live_price(ticker):
         return 0
 
 # 3. Calculs
-with st.spinner('Connexion aux places boursières...'):
+with st.spinner('Synchronisation du portefeuille...'):
     df['Prix Actuel'] = df['Ticker'].apply(get_live_price)
     df['Valeur Totale'] = df['Quantité'] * df['Prix Actuel']
     df['Plus-Value'] = df['Valeur Totale'] - (df['Quantité'] * df['PRU'])
@@ -54,6 +63,17 @@ st.title("📈 Suivi PEA Temps Réel")
 
 total_v = df['Valeur Totale'].sum()
 total_g = df['Plus-Value'].sum()
+
+c1, c2 = st.columns(2)
+c1.metric("Valeur Totale", f"{total_v:,.2f} €".replace(',', ' '))
+c2.metric("Plus-Value Totale", f"{total_g:,.2f} €".replace(',', ' '), f"{(total_g/(total_v-total_g)*100):.2f}%")
+
+st.dataframe(df.style.format({
+    'PRU': '{:.4f} €', 'Prix Actuel': '{:.3f} €',
+    'Valeur Totale': '{:.2f} €', 'Plus-Value': '{:.2f} €', 'Perf %': '{:.2f}%'
+}), use_container_width=True)
+
+st.plotly_chart(px.pie(df, values='Valeur Totale', names='Nom', title="Répartition du Portefeuille"))
 
 c1, c2 = st.columns(2)
 c1.metric("Valeur Totale", f"{total_v:,.2f} €".replace(',', ' '))
