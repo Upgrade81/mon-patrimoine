@@ -7,8 +7,7 @@ import plotly.express as px
 st.set_page_config(page_title="Mon Dashboard Patrimoine", layout="wide")
 st.title("📈 Mon Patrimoine en Temps Réel")
 
-# --- 1. TES DONNÉES (Saisie manuelle pour commencer) ---
-# Astuce : Tu pourras plus tard charger un fichier Excel ici
+# --- 1. TES DONNÉES (Version Corrigée) ---
 data = {
     'Enveloppe': ['PEA', 'PEA', 'PEA', 'PEA'],
     'Nom': [
@@ -30,12 +29,12 @@ data = {
         1995     # iShares
     ],
     'PRU': [
-        477.41,   # World (Attention au point décimal)
+        477.41,   # World
         29.345,   # Europe
         25.8452,  # S&P 500
         5.0873    # iShares
     ]
-}
+} # <-- Cette accolade ferme le dictionnaire "data" ouvert à la ligne 2
 
 df = pd.DataFrame(data)
 
