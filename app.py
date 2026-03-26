@@ -17,24 +17,20 @@ data = {
         'iShares MSCI Wld Swap PEA'
     ],
     'Ticker': [
-        'WLD.PA',     # Amundi World
-        'PMEU.PA',    # Amundi Europe
+        'CW8.PA',     # Amundi World (Plus stable que WLD.PA pour BforBank)
+        'MSEU.PA',    # Amundi Europe (Ticker ajusté pour correspondre au prix de ~35€)
         'ESE.PA',     # BNPP S&P 500
-        'SWRD.L'      # iShares MSCI World
+        'IS15.DE'     # iShares World PEA (Ticker ajusté pour correspondre au prix de ~6€)
     ],
-    'Quantité': [
-        21,      # World
-        683,     # Europe
-        4380,    # S&P 500
-        1995     # iShares
-    ],
+    'Quantité': [21, 683, 4380, 1995],
     'PRU': [
         477.41,   # World
         29.345,   # Europe
         25.8452,  # S&P 500
         5.0873    # iShares
     ]
-} # <-- Cette accolade ferme le dictionnaire "data" ouvert à la ligne 2
+}
+
 
 df = pd.DataFrame(data)
 
