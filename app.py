@@ -4,14 +4,14 @@ import pandas as pd
 import plotly.express as px
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
 st.set_page_config(page_title="Mon Portfolio PEA", layout="wide")
 
-# --- SIDEBAR : MODE DISCRET ---
-st.sidebar.title("Paramètres")
-mode_discret = st.sidebar.checkbox("👁️ Mode Discret (Masquer montants)")
+# --- PARAMÈTRES ---
+st.sidebar.title("Configuration")
+mode_discret = st.sidebar.checkbox("👁️ Mode Discret")
 
 # 1. Données brutes
 data = {
@@ -22,7 +22,7 @@ data = {
 }
 df = pd.DataFrame(data)
 
-# 2. Fonctions de récupération
+# 2. Fonctions de récupération (Hybrid Scraping/API)
 def get_boursorama_price(ticker):
     codes = {'CW8.PA': '1rPCW8', 'PMEU.PA': '1rPMEU'}
     try:
@@ -33,73 +33,79 @@ def get_boursorama_price(ticker):
         price_tag = soup.find("span", {"class": "c-instrument c-instrument--last"})
         return float(price_tag.text.replace(" ", ""))
     except:
-        fallback = {'CW8.PA': 595.50, 'PMEU.PA': 35.265}
-        return fallback.get(ticker, 0)
+        return 0
 
-def get_live_price(ticker):
-    if ticker in ['CW8.PA', 'PMEU.PA']:
-        return get_boursorama_price(ticker)
+def get_hist_price(ticker, days_back):
     try:
         t = yf.Ticker(ticker)
-        price = t.fast_info['last_price']
-        if price is None or price < 0.1:
-            hist = t.history(period="1d")
-            price = hist['Close'].iloc[-1]
-        return price
+        hist = t.history(period="1y") 
+        target_date = datetime.now() - timedelta(days=days_back)
+        idx = hist.index.get_indexer([target_date], method='nearest')[0]
+        return hist['Close'].iloc[idx]
     except:
         return 0
 
-# 3. Calculs et Horodatage
-with st.spinner('Mise à jour des flux...'):
-    df['Prix Actuel'] = df['Ticker'].apply(get_live_price)
+# 3. Calculs
+with st.spinner('Analyse des performances...'):
+    # Prix Actuels
+    df['Prix Actuel'] = df['Ticker'].apply(lambda x: get_boursorama_price(x) if x in ['CW8.PA', 'PMEU.PA'] else yf.Ticker(x).fast_info['last_price'])
+    
+    # Historiques pour variations
+    df['Prix_1J'] = df['Ticker'].apply(lambda x: get_hist_price(x, 1))
+    df['Prix_1M'] = df['Ticker'].apply(lambda x: get_hist_price(x, 30))
+    df['Prix_1Y'] = df['Ticker'].apply(lambda x: get_hist_price(x, 365))
+
+    # Valeurs et Performances
     df['Valeur Totale'] = df['Quantité'] * df['Prix Actuel']
     df['Plus-Value'] = df['Valeur Totale'] - (df['Quantité'] * df['PRU'])
-    df['Perf %'] = (df['Plus-Value'] / (df['Quantité'] * df['PRU'])) * 100
-    
+    df['Var_1J'] = ((df['Prix Actuel'] - df['Prix_1J']) / df['Prix_1J']) * 100
+    df['Var_1M'] = ((df['Prix Actuel'] - df['Prix_1M']) / df['Prix_1M']) * 100
+    df['Var_1Y'] = ((df['Prix Actuel'] - df['Prix_1Y']) / df['Prix_1Y']) * 100
+    df['Perf Globale %'] = ((df['Prix Actuel'] - df['PRU']) / df['PRU']) * 100
+
     paris_tz = pytz.timezone('Europe/Paris')
     now = datetime.now(paris_tz).strftime("%d/%m/%Y %H:%M:%S")
 
-# 4. Affichage des Metrics
-st.title("📈 Mon Patrimoine PEA")
-st.caption(f"Dernière actualisation : **{now}**")
+# 4. Affichage
+st.title("📈 Dashboard Performance PEA")
+st.caption(f"Dernière mise à jour : {now}")
 
 total_v = df['Valeur Totale'].sum()
 total_g = df['Plus-Value'].sum()
-perf_globale = (total_g / (total_v - total_g)) * 100
 
-def format_val(val, suffix="€"):
-    if mode_discret:
-        return "********"
-    return f"{val:,.2f} {suffix}".replace(',', ' ')
+def format_val(val):
+    return "********" if mode_discret else f"{val:,.2f} €".replace(',', ' ')
 
 c1, c2, c3 = st.columns(3)
-c1.metric("Valeur Totale", format_val(total_v))
-c2.metric("Plus-Value Totale", format_val(total_g))
-c3.metric("Performance Globale", f"{perf_globale:.2f} %")
+c1.metric("Capital Total", format_val(total_v))
+c2.metric("Plus-Value Latente", format_val(total_g), delta=f"{df['Var_1J'].mean():.2f}% (24h)")
+c3.metric("Performance Moyenne", f"{df['Perf Globale %'].mean():.2f}%")
 
 st.divider()
 
-# --- TABLEAU FORMATE ---
-# Copie pour affichage afin de ne pas casser les calculs
-display_df = df.copy()
+# --- TABLEAU AVEC COULEURS ---
+def color_sur_fond(val):
+    color = '#ff4b4b' if val < 0 else '#09ab3b' # Rouge / Vert Streamlit
+    return f'color: {color}; font-weight: bold'
+
+display_df = df[['Nom', 'Quantité', 'Prix Actuel', 'Valeur Totale', 'Perf Globale %', 'Var_1J', 'Var_1M', 'Var_1Y']].copy()
+
 if mode_discret:
-    cols_to_hide = ['PRU', 'Prix Actuel', 'Valeur Totale', 'Plus-Value']
-    for col in cols_to_hide:
-        display_df[col] = "********"
-else:
-    # Formatage classique
-    display_df['PRU'] = display_df['PRU'].map('{:.2f} €'.format)
-    display_df['Prix Actuel'] = display_df['Prix Actuel'].map('{:.2f} €'.format)
-    display_df['Valeur Totale'] = display_df['Valeur Totale'].map('{:.2f} €'.format)
-    display_df['Plus-Value'] = display_df['Plus-Value'].map('{:.2f} €'.format)
+    display_df['Prix Actuel'] = "********"
+    display_df['Valeur Totale'] = "********"
 
-display_df['Perf %'] = display_df['Perf %'].map('{:.2f} %'.format)
+st.subheader("Détail des actifs et Variations")
+st.dataframe(display_df.style.applymap(color_sur_fond, subset=['Perf Globale %', 'Var_1J', 'Var_1M', 'Var_1Y'])
+             .format({
+                 'Prix Actuel': '{:.2f} €' if not mode_discret else '{}',
+                 'Valeur Totale': '{:.2f} €' if not mode_discret else '{}',
+                 'Perf Globale %': '{:.2f}%',
+                 'Var_1J': '{:.2f}%',
+                 'Var_1M': '{:.2f}%',
+                 'Var_1Y': '{:.2f}%'
+             }), use_container_width=True)
 
-st.dataframe(display_df, use_container_width=True)
-
-# Graphique (On masque les chiffres dans le graphique si mode discret)
-fig = px.pie(df, values='Valeur Totale', names='Nom', hole=0.4, title="Répartition du Portefeuille")
-if mode_discret:
-    fig.update_traces(textinfo='none', hovertemplate=None)
-
-st.plotly_chart(fig)
+# Graphique de Performance
+st.plotly_chart(px.bar(df, x='Nom', y='Perf Globale %', color='Perf Globale %', 
+                       color_continuous_scale='RdYlGn',
+                       title="Performance globale par actif (en %)"))
