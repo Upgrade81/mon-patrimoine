@@ -20,7 +20,7 @@ data = {
         'WLD.PA',     # Amundi World
         'PMEU.PA',    # Amundi Europe
         'ESE.PA',     # BNPP S&P 500
-        'EUNLD.DE'    # iShares World
+        'SWRD.L'      # iShares MSCI World
     ],
     'Quantité': [
         21,      # World
