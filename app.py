@@ -32,14 +32,12 @@ data_av1 = {
     'Enveloppe': 'AV Suravenir'
 }
 
-# --- NOUVELLE SECTION AV2 Meilleurtaux (Spirica) ---
-# Ticker Yahoo pour LU1135865084 est 500.PA. 
-# Le Fonds Euro est traité comme valeur fixe.
+# --- Section AV2 Meilleurtaux (Spirica) ---
 data_av2 = {
-    'Ticker': ['500.PA', 'FIXED_EURO_NETISSIMA'],
+    'Ticker': ['LU1135865084', 'FIXED_EURO_NETISSIMA'], 
     'Nom': ['Amundi S&P 500 ETF', 'Fonds Euro Netissima'],
-    'Quantité': [105.5002, 1], # Quantité = 1 pour fonds euro
-    'PRU': [377.49, 10000.00], # Investissement initial netissima = 10k
+    'Quantité': [105.5002, 1],
+    'PRU': [377.49, 10000.00],
     'Enveloppe': 'AV Meilleurtaux'
 }
 
@@ -47,32 +45,52 @@ df_pea = pd.DataFrame(data_pea)
 df_av1 = pd.DataFrame(data_av1)
 df_av2 = pd.DataFrame(data_av2)
 
-# 2. FONCTIONS DE RÉCUPÉRATION
+# 2. FONCTIONS DE RÉCUPÉRATION (SCRAPING & API)
 def get_boursorama_price(symbol):
+    # Mapping précis vers les pages Boursorama
     mapping = {
         'CW8.PA': 'trackers/cours/1rPCW8',
         'PMEU.PA': 'trackers/cours/1rPMEU',
         'IE00BYX5NX33': 'opcvm/cours/MP-833441',
-        'FR00140081Y1': 'opcvm/cours/MP-441606'
+        'FR00140081Y1': 'opcvm/cours/MP-441606',
+        'LU1135865084': 'trackers/cours/1rP500' # L'identifiant pour ton S&P 500 Meilleurtaux
     }
-    fallbacks = {'IE00BYX5NX33': 12.16, 'FR00140081Y1': 126.56, 'CW8.PA': 595.50, 'PMEU.PA': 35.265}
+    
+    # Valeurs de secours (Fallbacks)
+    fallbacks = {
+        'IE00BYX5NX33': 12.16, 
+        'FR00140081Y1': 126.56, 
+        'LU1135865084': 410.97,
+        'CW8.PA': 595.50, 
+        'PMEU.PA': 35.265
+    }
+
     try:
         url = f"https://www.boursorama.com/bourse/{mapping[symbol]}/"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=5)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        price_tag = soup.find("span", {"class": "c-instrument c-instrument--last"})
-        return float(price_tag.text.replace(" ", "").replace("\n", "").replace("€", ""))
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0'}
+        response = requests.get(url, headers=headers, timeout=7)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            price_tag = soup.find("span", {"class": "c-instrument c-instrument--last"})
+            if price_tag:
+                raw_price = price_tag.text.replace(" ", "").replace("\n", "").replace("€", "").strip()
+                return float(raw_price)
     except:
-        return fallbacks.get(symbol, 0)
+        pass
+    return fallbacks.get(symbol, 0)
 
 def get_live_price(ticker):
-    # Fallback spécifique pour fonds Euro Netissima
+    # Cas particulier : Fonds Euro Netissima (Valeur fixe car non coté)
     if ticker == 'FIXED_EURO_NETISSIMA':
         return 12725.89
-
-    if ticker in ['CW8.PA', 'PMEU.PA', 'IE00BYX5NX33', 'FR00140081Y1']:
+        
+    # Liste des actifs à scraper sur Boursorama (priorité à la précision)
+    to_scrape = ['CW8.PA', 'PMEU.PA', 'IE00BYX5NX33', 'FR00140081Y1', 'LU1135865084']
+    
+    if ticker in to_scrape:
         return get_boursorama_price(ticker)
+        
+    # Autres actifs via Yahoo Finance (ESE, WPEA)
     try:
         t = yf.Ticker(ticker)
         price = t.fast_info['last_price']
@@ -86,27 +104,17 @@ def get_live_price(ticker):
 # 3. CALCULS
 try:
     with st.spinner('Synchronisation du patrimoine complet...'):
-        # Calcul PEA
-        df_pea['Prix Actuel'] = df_pea['Ticker'].apply(get_live_price)
-        df_pea['Valeur Totale'] = df_pea['Quantité'] * df_pea['Prix Actuel']
-        df_pea['Plus-Value'] = df_pea['Valeur Totale'] - (df_pea['Quantité'] * df_pea['PRU'])
-        df_pea['Perf %'] = (df_pea['Plus-Value'] / (df_pea['Quantité'] * df_pea['PRU'])) * 100
+        # Calcul par enveloppe
+        for df in [df_pea, df_av1, df_av2]:
+            df['Prix Actuel'] = df['Ticker'].apply(get_live_price)
+            df['Valeur Totale'] = df['Quantité'] * df['Prix Actuel']
+            df['Plus-Value'] = df['Valeur Totale'] - (df['Quantité'] * df['PRU'])
+            df['Perf %'] = (df['Plus-Value'] / (df['Quantité'] * df['PRU'])) * 100
 
-        # Calcul AV1
-        df_av1['Prix Actuel'] = df_av1['Ticker'].apply(get_live_price)
-        df_av1['Valeur Totale'] = df_av1['Quantité'] * df_av1['Prix Actuel']
-        df_av1['Plus-Value'] = df_av1['Valeur Totale'] - (df_av1['Quantité'] * df_av1['PRU'])
-        df_av1['Perf %'] = (df_av1['Plus-Value'] / (df_av1['Quantité'] * df_av1['PRU'])) * 100
-
-        # Calcul AV2
-        df_av2['Prix Actuel'] = df_av2['Ticker'].apply(get_live_price)
-        df_av2['Valeur Totale'] = df_av2['Quantité'] * df_av2['Prix Actuel']
-        df_av2['Plus-Value'] = df_av2['Valeur Totale'] - (df_av2['Quantité'] * df_av2['PRU'])
-        df_av2['Perf %'] = (df_av2['Plus-Value'] / (df_av2['Quantité'] * df_av2['PRU'])) * 100
-
-        # Global
-        total_patrimoine = df_pea['Valeur Totale'].sum() + df_av1['Valeur Totale'].sum() + df_av2['Valeur Totale'].sum()
-        total_pv = df_pea['Plus-Value'].sum() + df_av1['Plus-Value'].sum() + df_av2['Plus-Value'].sum()
+        # Totaux Globaux
+        df_all = pd.concat([df_pea, df_av1, df_av2])
+        total_patrimoine = df_all['Valeur Totale'].sum()
+        total_pv = df_all['Plus-Value'].sum()
 
         paris_tz = pytz.timezone('Europe/Paris')
         now = datetime.now(paris_tz).strftime("%d/%m/%Y %H:%M:%S")
@@ -119,6 +127,7 @@ try:
         if mode_discret: return "********"
         return f"{val:,.2f} {suffix}".replace(',', ' ')
 
+    # Metrics Haut de page
     m1, m2, m3 = st.columns(3)
     m1.metric("Patrimoine Total", format_val(total_patrimoine))
     m2.metric("Plus-Value Latente", format_val(total_pv))
@@ -126,10 +135,12 @@ try:
 
     st.divider()
 
+    # Style Couleurs
     def style_perf(val):
         color = '#ff4b4b' if '-' in str(val) else '#09ab3b'
         return f'color: {color}; font-weight: bold'
 
+    # Affichage des tableaux
     def display_table(df, title):
         st.subheader(title)
         disp = df.copy()
@@ -143,13 +154,14 @@ try:
     display_table(df_av1, "🛡️ Assurance Vie 1 - Suravenir")
     display_table(df_av2, "🛡️ Assurance Vie 2 - Meilleurtaux")
 
+    # Graphiques
+    st.divider()
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        df_total = pd.concat([df_pea, df_av1, df_av2])
-        st.plotly_chart(px.pie(df_total, values='Valeur Totale', names='Enveloppe', hole=0.4, title="Par Enveloppe"), use_container_width=True)
+        st.plotly_chart(px.pie(df_all, values='Valeur Totale', names='Enveloppe', hole=0.4, title="Répartition par Enveloppe"), use_container_width=True)
     with col_g2:
-        st.plotly_chart(px.pie(df_total, values='Valeur Totale', names='Nom', hole=0.4, title="Par Actif"), use_container_width=True)
+        st.plotly_chart(px.pie(df_all, values='Valeur Totale', names='Nom', hole=0.4, title="Répartition par Actif"), use_container_width=True)
 
 except Exception as e:
-    st.error(f"Une erreur est survenue : {e}")
+    st.error(f"Une erreur est survenue lors du calcul : {e}")
     
