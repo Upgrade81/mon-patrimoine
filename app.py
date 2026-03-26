@@ -34,6 +34,7 @@ data = {
         29.345,   # Europe
         25.8452,  # S&P 500
         5.0873    # iShares
+    ]
 }
 
 df = pd.DataFrame(data)
