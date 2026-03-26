@@ -16,12 +16,13 @@ data = {
         'BNPP Easy S&P 500 PEA', 
         'iShares MSCI Wld Swap PEA'
     ],
-    'Ticker': [
-        'CW8.PA',     # Amundi World (Plus stable que WLD.PA pour BforBank)
-        'MSEU.PA',    # Amundi Europe (Ticker ajusté pour correspondre au prix de ~35€)
-        'ESE.PA',     # BNPP S&P 500
-        'IS15.DE'     # iShares World PEA (Ticker ajusté pour correspondre au prix de ~6€)
+        'Ticker': [
+        'CW8.PA',     # Amundi World (Fonctionne déjà)
+        'MSE.PA',      # Amundi Europe (Ticker corrigé pour Bourse de Paris)
+        'ESE.PA',     # BNPP S&P 500 (Fonctionne déjà)
+        'WPEA.PA'     # iShares World Swap PEA (Le ticker le plus fiable pour ton ISIN)
     ],
+    
     'Quantité': [21, 683, 4380, 1995],
     'PRU': [
         477.41,   # World
