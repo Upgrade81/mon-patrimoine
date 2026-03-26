@@ -4,8 +4,14 @@ import pandas as pd
 import plotly.express as px
 import requests
 from bs4 import BeautifulSoup
+from datetime import datetime
+import pytz
 
 st.set_page_config(page_title="Mon Portfolio PEA", layout="wide")
+
+# --- SIDEBAR : MODE DISCRET ---
+st.sidebar.title("Paramètres")
+mode_discret = st.sidebar.checkbox("👁️ Mode Discret (Masquer montants)")
 
 # 1. Données brutes
 data = {
@@ -16,13 +22,9 @@ data = {
 }
 df = pd.DataFrame(data)
 
-# 2. Fonction de récupération robuste via Boursorama
+# 2. Fonctions de récupération
 def get_boursorama_price(ticker):
-    # Mapping des tickers vers les codes Boursorama
-    codes = {
-        'CW8.PA': '1rPCW8',
-        'PMEU.PA': '1rPMEU'
-    }
+    codes = {'CW8.PA': '1rPCW8', 'PMEU.PA': '1rPMEU'}
     try:
         url = f"https://www.boursorama.com/bourse/trackers/cours/{codes[ticker]}/"
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -31,16 +33,12 @@ def get_boursorama_price(ticker):
         price_tag = soup.find("span", {"class": "c-instrument c-instrument--last"})
         return float(price_tag.text.replace(" ", ""))
     except:
-        # Valeurs de secours si Boursorama est indisponible
         fallback = {'CW8.PA': 595.50, 'PMEU.PA': 35.265}
         return fallback.get(ticker, 0)
 
 def get_live_price(ticker):
-    # Pour les deux lignes Amundi qui buggent sur Yahoo
     if ticker in ['CW8.PA', 'PMEU.PA']:
         return get_boursorama_price(ticker)
-    
-    # Pour les autres (BNPP et iShares) qui fonctionnent bien sur Yahoo
     try:
         t = yf.Ticker(ticker)
         price = t.fast_info['last_price']
@@ -51,33 +49,57 @@ def get_live_price(ticker):
     except:
         return 0
 
-# 3. Calculs
-with st.spinner('Synchronisation du portefeuille...'):
+# 3. Calculs et Horodatage
+with st.spinner('Mise à jour des flux...'):
     df['Prix Actuel'] = df['Ticker'].apply(get_live_price)
     df['Valeur Totale'] = df['Quantité'] * df['Prix Actuel']
     df['Plus-Value'] = df['Valeur Totale'] - (df['Quantité'] * df['PRU'])
     df['Perf %'] = (df['Plus-Value'] / (df['Quantité'] * df['PRU'])) * 100
+    
+    paris_tz = pytz.timezone('Europe/Paris')
+    now = datetime.now(paris_tz).strftime("%d/%m/%Y %H:%M:%S")
 
-# 4. Affichage
-st.title("📈 Suivi PEA Temps Réel")
+# 4. Affichage des Metrics
+st.title("📈 Mon Patrimoine PEA")
+st.caption(f"Dernière actualisation : **{now}**")
 
 total_v = df['Valeur Totale'].sum()
 total_g = df['Plus-Value'].sum()
+perf_globale = (total_g / (total_v - total_g)) * 100
 
-c1, c2 = st.columns(2)
-c1.metric("Valeur Totale", f"{total_v:,.2f} €".replace(',', ' '))
-c2.metric("Plus-Value Totale", f"{total_g:,.2f} €".replace(',', ' '), f"{(total_g/(total_v-total_g)*100):.2f}%")
+def format_val(val, suffix="€"):
+    if mode_discret:
+        return "********"
+    return f"{val:,.2f} {suffix}".replace(',', ' ')
 
-st.dataframe(df.style.format({
-    'PRU': '{:.4f} €', 'Prix Actuel': '{:.3f} €',
-    'Valeur Totale': '{:.2f} €', 'Plus-Value': '{:.2f} €', 'Perf %': '{:.2f}%'
-}), use_container_width=True)
+c1, c2, c3 = st.columns(3)
+c1.metric("Valeur Totale", format_val(total_v))
+c2.metric("Plus-Value Totale", format_val(total_g))
+c3.metric("Performance Globale", f"{perf_globale:.2f} %")
 
-st.plotly_chart(px.pie(df, values='Valeur Totale', names='Nom', title="Répartition du Portefeuille"))
+st.divider()
 
-c1, c2 = st.columns(2)
-c1.metric("Valeur Totale", f"{total_v:,.2f} €".replace(',', ' '))
-c2.metric("Plus-Value Totale", f"{total_g:,.2f} €".replace(',', ' '), f"{(total_g/(total_v-total_g)*100):.2f}%")
+# --- TABLEAU FORMATE ---
+# Copie pour affichage afin de ne pas casser les calculs
+display_df = df.copy()
+if mode_discret:
+    cols_to_hide = ['PRU', 'Prix Actuel', 'Valeur Totale', 'Plus-Value']
+    for col in cols_to_hide:
+        display_df[col] = "********"
+else:
+    # Formatage classique
+    display_df['PRU'] = display_df['PRU'].map('{:.2f} €'.format)
+    display_df['Prix Actuel'] = display_df['Prix Actuel'].map('{:.2f} €'.format)
+    display_df['Valeur Totale'] = display_df['Valeur Totale'].map('{:.2f} €'.format)
+    display_df['Plus-Value'] = display_df['Plus-Value'].map('{:.2f} €'.format)
 
-st.dataframe(df.style.format({'PRU': '{:.4f} €', 'Prix Actuel': '{:.3f} €', 'Valeur Totale': '{:.2f} €', 'Plus-Value': '{:.2f} €', 'Perf %': '{:.2f}%'}), use_container_width=True)
-st.plotly_chart(px.pie(df, values='Valeur Totale', names='Nom', title="Répartition"))
+display_df['Perf %'] = display_df['Perf %'].map('{:.2f} %'.format)
+
+st.dataframe(display_df, use_container_width=True)
+
+# Graphique (On masque les chiffres dans le graphique si mode discret)
+fig = px.pie(df, values='Valeur Totale', names='Nom', hole=0.4, title="Répartition du Portefeuille")
+if mode_discret:
+    fig.update_traces(textinfo='none', hovertemplate=None)
+
+st.plotly_chart(fig)
