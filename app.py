@@ -17,10 +17,10 @@ data = {
         'iShares MSCI Wld Swap PEA'
     ],
     'Ticker': [
-        'CW8.BN',     # Amundi World (Version Euronext Milan, plus stable sur Yahoo)
-        'PMEU.F',     # Amundi Europe (Version Francfort, affiche bien ~35€)
-        'ESE.PA',     # BNPP S&P 500 (Fonctionne déjà bien à ~28€)
-        'WPEA.PA'     # iShares World (Fonctionne déjà bien à ~5.99€)
+        'CW8.PA',     # Amundi World (Prix attendu ~595€)
+        'MSEU.PA',    # Amundi Europe (Correspond au code FR0013412038, prix attendu ~35€)
+        'ESE.PA',     # BNPP S&P 500 (Fonctionne déjà à ~28€)
+        'WPEA.PA'     # iShares World (Fonctionne déjà à ~5.99€)
     ],
     'Quantité': [21, 683, 4380, 1995],
     'PRU': [477.41, 29.345, 25.8452, 5.0873]
