@@ -10,11 +10,30 @@ st.title("📈 Mon Patrimoine en Temps Réel")
 # --- 1. TES DONNÉES (Saisie manuelle pour commencer) ---
 # Astuce : Tu pourras plus tard charger un fichier Excel ici
 data = {
-    'Enveloppe': ['PEA', 'Assurance Vie', 'PEA', 'Crypto'],
-    'Nom': ['Air Liquide', 'LVMH', 'Amundi MSCI World', 'Bitcoin'],
-    'Ticker': ['AI.PA', 'MC.PA', 'CW8.PA', 'BTC-EUR'],
-    'Quantité': [10, 2, 5, 0.02],
-    'PRU': [155.20, 780.00, 430.00, 40000.00]
+    'Enveloppe': ['PEA', 'PEA', 'PEA', 'PEA'],
+    'Nom': [
+        'Amundi MSCI World Swap', 
+        'Amundi MSCI Europe PEA', 
+        'BNPP Easy S&P 500 PEA', 
+        'iShares MSCI Wld Swap PEA'
+    ],
+    'Ticker': [
+        'WLD.PA',     # Amundi World
+        'PMEU.PA',    # Amundi Europe
+        'ESE.PA',     # BNPP S&P 500
+        'EUNLD.DE'    # iShares World
+    ],
+    'Quantité': [
+        21,      # World
+        683,     # Europe
+        4380,    # S&P 500
+        1995     # iShares
+    ],
+    'PRU': [
+        477.41,   # World (Attention au point décimal)
+        29.345,   # Europe
+        25.8452,  # S&P 500
+        5.0873    # iShares
 }
 
 df = pd.DataFrame(data)
