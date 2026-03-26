@@ -14,6 +14,7 @@ st.sidebar.title("Configuration")
 mode_discret = st.sidebar.checkbox("👁️ Mode Discret")
 
 # 1. DONNÉES BRUTES
+# --- Section PEA ---
 data_pea = {
     'Ticker': ['CW8.PA', 'PMEU.PA', 'ESE.PA', 'WPEA.PA'],
     'Nom': ['Amundi World', 'Amundi Europe', 'BNPP S&P 500', 'iShares World'],
@@ -22,7 +23,8 @@ data_pea = {
     'Enveloppe': 'PEA'
 }
 
-data_av = {
+# --- Section AV1 Suravenir (Croissance Avenir) ---
+data_av1 = {
     'Ticker': ['IE00BYX5NX33', 'FR00140081Y1'],
     'Nom': ['Fidelity MSCI World', 'Carmignac Crédit 2027'],
     'Quantité': [3751.4553, 38.7903],
@@ -30,10 +32,22 @@ data_av = {
     'Enveloppe': 'AV Suravenir'
 }
 
-df_pea = pd.DataFrame(data_pea)
-df_av = pd.DataFrame(data_av)
+# --- NOUVELLE SECTION AV2 Meilleurtaux (Spirica) ---
+# Ticker Yahoo pour LU1135865084 est 500.PA. 
+# Le Fonds Euro est traité comme valeur fixe.
+data_av2 = {
+    'Ticker': ['500.PA', 'FIXED_EURO_NETISSIMA'],
+    'Nom': ['Amundi S&P 500 ETF', 'Fonds Euro Netissima'],
+    'Quantité': [105.5002, 1], # Quantité = 1 pour fonds euro
+    'PRU': [377.49, 10000.00], # Investissement initial netissima = 10k
+    'Enveloppe': 'AV Meilleurtaux'
+}
 
-# 2. FONCTION DE RÉCUPÉRATION ROBUSTE
+df_pea = pd.DataFrame(data_pea)
+df_av1 = pd.DataFrame(data_av1)
+df_av2 = pd.DataFrame(data_av2)
+
+# 2. FONCTIONS DE RÉCUPÉRATION
 def get_boursorama_price(symbol):
     mapping = {
         'CW8.PA': 'trackers/cours/1rPCW8',
@@ -41,33 +55,22 @@ def get_boursorama_price(symbol):
         'IE00BYX5NX33': 'opcvm/cours/MP-833441',
         'FR00140081Y1': 'opcvm/cours/MP-441606'
     }
-    
-    # Valeurs de secours issues de tes captures d'écran
-    fallbacks = {
-        'IE00BYX5NX33': 12.16, 
-        'FR00140081Y1': 126.56, 
-        'CW8.PA': 595.50, 
-        'PMEU.PA': 35.265
-    }
-
+    fallbacks = {'IE00BYX5NX33': 12.16, 'FR00140081Y1': 126.56, 'CW8.PA': 595.50, 'PMEU.PA': 35.265}
     try:
         url = f"https://www.boursorama.com/bourse/{mapping[symbol]}/"
-        # User-Agent plus réaliste pour éviter le blocage
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
+        headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            price_tag = soup.find("span", {"class": "c-instrument c-instrument--last"})
-            if price_tag:
-                return float(price_tag.text.replace(" ", "").replace("\n", "").replace("€", ""))
-    except Exception as e:
-        pass
-    
-    return fallbacks.get(symbol, 0)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        price_tag = soup.find("span", {"class": "c-instrument c-instrument--last"})
+        return float(price_tag.text.replace(" ", "").replace("\n", "").replace("€", ""))
+    except:
+        return fallbacks.get(symbol, 0)
 
 def get_live_price(ticker):
+    # Fallback spécifique pour fonds Euro Netissima
+    if ticker == 'FIXED_EURO_NETISSIMA':
+        return 12725.89
+
     if ticker in ['CW8.PA', 'PMEU.PA', 'IE00BYX5NX33', 'FR00140081Y1']:
         return get_boursorama_price(ticker)
     try:
@@ -80,27 +83,36 @@ def get_live_price(ticker):
     except:
         return 0
 
-# 3. CALCULS (Placés dans un bloc try/except pour éviter l'écran noir)
+# 3. CALCULS
 try:
-    with st.spinner('Chargement des cours...'):
+    with st.spinner('Synchronisation du patrimoine complet...'):
+        # Calcul PEA
         df_pea['Prix Actuel'] = df_pea['Ticker'].apply(get_live_price)
         df_pea['Valeur Totale'] = df_pea['Quantité'] * df_pea['Prix Actuel']
         df_pea['Plus-Value'] = df_pea['Valeur Totale'] - (df_pea['Quantité'] * df_pea['PRU'])
         df_pea['Perf %'] = (df_pea['Plus-Value'] / (df_pea['Quantité'] * df_pea['PRU'])) * 100
 
-        df_av['Prix Actuel'] = df_av['Ticker'].apply(get_live_price)
-        df_av['Valeur Totale'] = df_av['Quantité'] * df_av['Prix Actuel']
-        df_av['Plus-Value'] = df_av['Valeur Totale'] - (df_av['Quantité'] * df_av['PRU'])
-        df_av['Perf %'] = (df_av['Plus-Value'] / (df_av['Quantité'] * df_av['PRU'])) * 100
+        # Calcul AV1
+        df_av1['Prix Actuel'] = df_av1['Ticker'].apply(get_live_price)
+        df_av1['Valeur Totale'] = df_av1['Quantité'] * df_av1['Prix Actuel']
+        df_av1['Plus-Value'] = df_av1['Valeur Totale'] - (df_av1['Quantité'] * df_av1['PRU'])
+        df_av1['Perf %'] = (df_av1['Plus-Value'] / (df_av1['Quantité'] * df_av1['PRU'])) * 100
 
-        total_patrimoine = df_pea['Valeur Totale'].sum() + df_av['Valeur Totale'].sum()
-        total_pv = df_pea['Plus-Value'].sum() + df_av['Plus-Value'].sum()
+        # Calcul AV2
+        df_av2['Prix Actuel'] = df_av2['Ticker'].apply(get_live_price)
+        df_av2['Valeur Totale'] = df_av2['Quantité'] * df_av2['Prix Actuel']
+        df_av2['Plus-Value'] = df_av2['Valeur Totale'] - (df_av2['Quantité'] * df_av2['PRU'])
+        df_av2['Perf %'] = (df_av2['Plus-Value'] / (df_av2['Quantité'] * df_av2['PRU'])) * 100
+
+        # Global
+        total_patrimoine = df_pea['Valeur Totale'].sum() + df_av1['Valeur Totale'].sum() + df_av2['Valeur Totale'].sum()
+        total_pv = df_pea['Plus-Value'].sum() + df_av1['Plus-Value'].sum() + df_av2['Plus-Value'].sum()
 
         paris_tz = pytz.timezone('Europe/Paris')
         now = datetime.now(paris_tz).strftime("%d/%m/%Y %H:%M:%S")
 
     # 4. AFFICHAGE
-    st.title("🏦 Dashboard Patrimonial")
+    st.title("🏦 Dashboard Patrimonial Consolidé")
     st.caption(f"Dernière synchronisation : **{now}**")
 
     def format_val(val, suffix="€"):
@@ -110,7 +122,7 @@ try:
     m1, m2, m3 = st.columns(3)
     m1.metric("Patrimoine Total", format_val(total_patrimoine))
     m2.metric("Plus-Value Latente", format_val(total_pv))
-    m3.metric("Performance Globale", f"{(total_pv / (total_patrimoine - total_pv) * 100):.2f} %" if total_patrimoine != total_pv else "0.00 %")
+    m3.metric("Performance Globale", f"{(total_pv / (total_patrimoine - total_pv) * 100):.2f} %")
 
     st.divider()
 
@@ -128,15 +140,16 @@ try:
         st.dataframe(disp.style.applymap(style_perf, subset=['Perf %']).format({'Perf %': '{:.2f} %'}), use_container_width=True)
 
     display_table(df_pea, "📈 Portefeuille PEA")
-    display_table(df_av, "🛡️ Assurance Vie - Suravenir")
+    display_table(df_av1, "🛡️ Assurance Vie 1 - Suravenir")
+    display_table(df_av2, "🛡️ Assurance Vie 2 - Meilleurtaux")
 
     col_g1, col_g2 = st.columns(2)
     with col_g1:
-        df_total = pd.concat([df_pea, df_av])
+        df_total = pd.concat([df_pea, df_av1, df_av2])
         st.plotly_chart(px.pie(df_total, values='Valeur Totale', names='Enveloppe', hole=0.4, title="Par Enveloppe"), use_container_width=True)
     with col_g2:
         st.plotly_chart(px.pie(df_total, values='Valeur Totale', names='Nom', hole=0.4, title="Par Actif"), use_container_width=True)
 
 except Exception as e:
-    st.error(f"Une erreur est survenue lors du calcul : {e}")
+    st.error(f"Une erreur est survenue : {e}")
     
