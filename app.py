@@ -4,97 +4,89 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime
 
-st.set_page_config(page_title="Patrimoine Global - Google Finance", layout="wide")
+st.set_page_config(page_title="Patrimoine Boursorama Live", layout="wide")
 
-# --- 1. CONFIGURATION DES ACTIFS ---
-# Mapping Google Finance (Format -> MARCHE:TICKER)
+# --- 1. CONFIGURATION DES ACTIFS (URLs Boursorama) ---
 assets = [
-    {'GKey': 'EPA:CW8', 'Qt': 21, 'PRU': 477.41, 'Env': 'PEA', 'Nom': 'Amundi World'},
-    {'GKey': 'EPA:PMEU', 'Qt': 683, 'PRU': 29.345, 'Env': 'PEA', 'Nom': 'Amundi Europe'},
-    {'GKey': 'EPA:ESE', 'Qt': 4380, 'PRU': 25.8452, 'Env': 'PEA', 'Nom': 'BNPP S&P 500'},
-    {'GKey': 'EPA:WPEA', 'Qt': 1995, 'PRU': 5.0873, 'Env': 'PEA', 'Nom': 'iShares World'},
-    # Pour les fonds AV, Google Finance est limité, on utilise un fallback fixe ou Yahoo
-    {'GKey': 'MUTF_FR:0P0001CLDK', 'Qt': 3751.4553, 'PRU': 11.24, 'Env': 'AV Suravenir', 'Nom': 'Fidelity World'},
-    {'GKey': 'MUTF_FR:0P0001P1UF', 'Qt': 38.7903, 'PRU': 109.29, 'Env': 'AV Suravenir', 'Nom': 'Carmignac 2027'},
-    {'GKey': 'EPA:500', 'Qt': 105.5002, 'PRU': 377.49, 'Env': 'AV Spirica', 'Nom': 'Amundi S&P 500'},
-    {'GKey': 'FIXED', 'Qt': 1, 'Val': 12725.89, 'PRU': 10000.00, 'Env': 'AV Spirica', 'Nom': 'Fonds Euro Netissima'},
-    {'GKey': 'EPA:ESE', 'Qt': 607.1548, 'PRU': 27.87, 'Env': 'AV 4d', 'Nom': 'BNP S&P 500 (4d)'},
-    {'GKey': 'MUTF_FR:0P0001P1UF', 'Qt': 36.0204, 'PRU': 109.49, 'Env': 'AV 4d', 'Nom': 'Carmignac 2027 (4d)'},
-    {'GKey': 'EPA:MSE', 'Qt': 8.6056, 'PRU': 49.40, 'Env': 'AV 4d', 'Nom': 'Amundi Stoxx 50'}
+    # PEA
+    {'Url': 'https://www.boursorama.com/bourse/etf/cours/1rACW8/', 'Qt': 21, 'PRU': 477.41, 'Env': 'PEA', 'Nom': 'Amundi World'},
+    {'Url': 'https://www.boursorama.com/bourse/etf/cours/1rAPMEU/', 'Qt': 683, 'PRU': 29.345, 'Env': 'PEA', 'Nom': 'Amundi Europe'},
+    {'Url': 'https://www.boursorama.com/bourse/etf/cours/1rAESE/', 'Qt': 4380, 'PRU': 25.8452, 'Env': 'PEA', 'Nom': 'BNPP S&P 500'},
+    {'Url': 'https://www.boursorama.com/bourse/etf/cours/1rAWPEA/', 'Qt': 1995, 'PRU': 5.0873, 'Env': 'PEA', 'Nom': 'iShares World'},
+    # AV Suravenir
+    {'Url': 'https://www.boursorama.com/bourse/opcvm/cours/0P0001CLDK/', 'Qt': 3751.4553, 'PRU': 11.24, 'Env': 'AV Suravenir', 'Nom': 'Fidelity World'},
+    {'Url': 'https://www.boursorama.com/bourse/opcvm/cours/0P0001P1UF/', 'Qt': 38.7903, 'PRU': 109.29, 'Env': 'AV Suravenir', 'Nom': 'Carmignac 2027'},
+    # AV Spirica
+    {'Url': 'https://www.boursorama.com/bourse/etf/cours/1rALU1135865084/', 'Qt': 105.5002, 'PRU': 377.49, 'Env': 'AV Spirica', 'Nom': 'Amundi S&P 500'},
+    {'Url': 'FIXED', 'Qt': 1, 'Val': 12725.89, 'PRU': 10000.00, 'Env': 'AV Spirica', 'Nom': 'Fonds Euro Netissima'},
+    # AV 4d
+    {'Url': 'https://www.boursorama.com/bourse/etf/cours/1rAFR0011550185/', 'Qt': 607.1548, 'PRU': 27.87, 'Env': 'AV 4d', 'Nom': 'BNP S&P 500 (4d)'},
+    {'Url': 'https://www.boursorama.com/bourse/opcvm/cours/0P0001P1UF/', 'Qt': 36.0204, 'PRU': 109.49, 'Env': 'AV 4d', 'Nom': 'Carmignac 2027 (4d)'},
+    {'Url': 'https://www.boursorama.com/bourse/etf/cours/1rAFR0007054358/', 'Qt': 8.6056, 'PRU': 49.40, 'Env': 'AV 4d', 'Nom': 'Amundi Stoxx 50'}
 ]
 
-# Prix au 01/01/2026 pour le calcul YTD (Manuel pour garantir la précision)
-PREVIOUS_CLOSE_YTD = {
-    'EPA:CW8': 585.40, 'EPA:PMEU': 34.82, 'EPA:ESE': 28.55, 'EPA:WPEA': 5.06,
-    'MUTF_FR:0P0001CLDK': 11.95, 'MUTF_FR:0P0001P1UF': 125.10, 'EPA:500': 405.20, 'EPA:MSE': 62.10
-}
-
-def scrape_google_finance(ticker):
-    if ticker == 'FIXED':
-        return 0, 0 # Le fonds euro est géré à part
+def scrape_boursorama(url):
+    if url == 'FIXED': return None
     
-    url = f"https://www.google.com/finance/quote/{ticker}"
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-    
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'}
     try:
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Scraping du prix actuel
-        price_classes = ["YMl9u", "fx96qc"] # Classes dynamiques de Google
-        price = None
-        for c in price_classes:
-            tag = soup.find("div", {"class": c})
-            if tag:
-                price = float(tag.text.replace('€', '').replace(',', '').replace('\xa0', '').strip())
-                break
+        # 1. Extraction du prix
+        price_tag = soup.find("span", class_="c-instrument--last")
+        price = float(price_tag.text.replace(" ", "").strip())
         
-        # Scraping de la variation jour (en %)
-        var_tag = soup.find("div", {"class": ["Jw7Cdb", "V73p9e"]})
-        var_jour = 0.0
-        if var_tag:
-            var_text = var_tag.text.replace('%', '').replace('+', '').replace(',', '.')
-            var_jour = float(var_text.split('(')[-1].replace(')', ''))
-            
-        return price, var_jour
+        # 2. Extraction Var Jour
+        var_day_tag = soup.find("span", class_="c-instrument--variation")
+        var_day = float(var_day_tag.text.replace("%", "").strip())
+        
+        # 3. Extraction Var YTD (Performance au 1er janvier)
+        # Boursorama affiche souvent la perf YTD dans une liste de détails
+        ytd = 0.0
+        ytd_tags = soup.find_all("span", class_="c-list-details__value")
+        for tag in ytd_tags:
+            if "%" in tag.text and ("+ " in tag.text or "- " in tag.text):
+                # On prend souvent la première variation de période longue trouvée qui ressemble au YTD
+                if "janv." in tag.parent.text.lower() or "1er" in tag.parent.text.lower():
+                    ytd = float(tag.text.replace("%", "").replace(" ", "").strip())
+                    break
+        
+        return price, var_day, ytd
     except:
-        return None, 0.0
+        return None, 0.0, 0.0
 
-# --- 2. TRAITEMENT ---
-st.title("🏦 Dashboard Patrimoine - Google Scraping")
+# --- 2. CALCULS ---
+st.title("🏦 Dashboard Patrimoine - Source Boursorama")
 
-with st.spinner('Extraction des données Google Finance...'):
+with st.spinner('Scraping Boursorama en cours...'):
     results = []
     for a in assets:
-        if a['GKey'] == 'FIXED':
-            p, vj = a['Val'], 0.0
+        if a['Url'] == 'FIXED':
+            p, vj, vy = a['Val'], 0.0, 1.5 # Perf estimée fonds euro
         else:
-            p, vj = scrape_google_finance(a['GKey'])
+            p, vj, vy = scrape_boursorama(a['Url'])
         
         if p:
             val_totale = p * a['Qt']
             pv_euros = val_totale - (a['PRU'] * a['Qt'])
-            perf_totale = (pv_euros / (a['PRU'] * a['Qt'])) * 100
-            
-            # Calcul YTD basé sur notre dictionnaire fixe
-            price_jan = PREVIOUS_CLOSE_YTD.get(a['GKey'], p)
-            var_ytd = ((p - price_jan) / price_jan) * 100
+            perf_tot = (pv_euros / (a['PRU'] * a['Qt'])) * 100
             
             results.append({
                 'Nom': a['Nom'], 'Env': a['Env'], 'Valeur': val_totale,
-                'PV': pv_euros, 'Var. Jour': vj, 'Var. YTD': var_ytd, 'Perf. Totale': perf_totale
+                'PV': pv_euros, 'Var. Jour': vj, 'Var. YTD': vy, 'Perf. Totale': perf_tot
             })
 
     df = pd.DataFrame(results)
 
 # --- 3. AFFICHAGE ---
-total_v = df['Valeur'].sum()
-total_pv = df['PV'].sum()
+t_val = df['Valeur'].sum()
+t_pv = df['PV'].sum()
 
 c1, c2, c3 = st.columns(3)
-c1.metric("Capital Total", f"{total_v:,.2f} €".replace(',', ' '))
-c2.metric("Plus-Value", f"{total_pv:,.2f} €".replace(',', ' '))
-c3.metric("Performance", f"{(total_pv/(total_v-total_pv)*100):.2f} %")
+c1.metric("Total", f"{t_val:,.2f} €".replace(',', ' '))
+c2.metric("Plus-Value", f"{t_pv:,.2f} €".replace(',', ' '))
+c3.metric("Performance", f"{(t_pv/(t_val-t_pv)*100):.2f} %")
 
 st.divider()
 
@@ -110,4 +102,5 @@ for env in df['Env'].unique():
                    subset=['Var. Jour', 'Var. YTD', 'Perf. Totale']),
         use_container_width=True, hide_index=True
     )
-    
+
+st.info(f"Dernière extraction Boursorama : {datetime.now().strftime('%H:%M:%S')}")
