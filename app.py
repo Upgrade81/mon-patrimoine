@@ -1,129 +1,110 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import plotly.express as px
 from datetime import datetime
 import pytz
 
-st.set_page_config(page_title="Patrimoine Global Live", layout="wide")
+st.set_page_config(page_title="Mon Patrimoine Live", layout="wide")
 
 # --- 1. CONFIGURATION DES ACTIFS ---
-# Liste consolidée de tes positions (Quantités réelles issues de tes captures)
+# On garde tes quantités exactes et tes PRU pour le calcul de performance
 assets = [
     # PEA
-    {'Ticker': 'CW8.PA', 'Qt': 21, 'Env': 'PEA', 'Nom': 'Amundi World'},
-    {'Ticker': 'PMEU.PA', 'Qt': 683, 'Env': 'PEA', 'Nom': 'Amundi Europe'},
-    {'Ticker': 'ESE.PA', 'Qt': 4380, 'Env': 'PEA', 'Nom': 'BNPP S&P 500'},
-    {'Ticker': 'WPEA.PA', 'Qt': 1995, 'Env': 'PEA', 'Nom': 'iShares World'},
+    {'Ticker': 'CW8.PA', 'Qt': 21, 'PRU': 477.41, 'Env': 'PEA', 'Nom': 'Amundi World'},
+    {'Ticker': 'PMEU.PA', 'Qt': 683, 'PRU': 29.345, 'Env': 'PEA', 'Nom': 'Amundi Europe'},
+    {'Ticker': 'ESE.PA', 'Qt': 4380, 'PRU': 25.8452, 'Env': 'PEA', 'Nom': 'BNPP S&P 500'},
+    {'Ticker': 'WPEA.PA', 'Qt': 1995, 'PRU': 5.0873, 'Env': 'PEA', 'Nom': 'iShares World'},
     # AV Suravenir
-    {'Ticker': '0P0001CLDK.F', 'Qt': 3751.4553, 'Env': 'AV Suravenir', 'Nom': 'Fidelity World'},
-    {'Ticker': '0P0001P1UF.F', 'Qt': 38.7903, 'Env': 'AV Suravenir', 'Nom': 'Carmignac 2027'},
+    {'Ticker': '0P0001CLDK.F', 'Qt': 3751.4553, 'PRU': 11.24, 'Env': 'AV Suravenir', 'Nom': 'Fidelity World'},
+    {'Ticker': '0P0001P1UF.F', 'Qt': 38.7903, 'PRU': 109.29, 'Env': 'AV Suravenir', 'Nom': 'Carmignac 2027'},
     # AV Spirica
-    {'Ticker': 'LU1135865084', 'Qt': 105.5002, 'Env': 'AV Spirica', 'Nom': 'Amundi S&P 500'},
-    {'Ticker': 'FIXED', 'Qt': 1, 'Val': 12725.89, 'Env': 'AV Spirica', 'Nom': 'Fonds Euro Netissima'},
+    {'Ticker': 'LU1135865084', 'Qt': 105.5002, 'PRU': 377.49, 'Env': 'AV Spirica', 'Nom': 'Amundi S&P 500'},
+    {'Ticker': 'FIXED', 'Qt': 1, 'Val': 12725.89, 'PRU': 10000.00, 'Env': 'AV Spirica', 'Nom': 'Fonds Euro Netissima'},
     # AV 4d
-    {'Ticker': 'FR0011550185', 'Qt': 607.1548, 'Env': 'AV 4d', 'Nom': 'BNP S&P 500 (4d)'},
-    {'Ticker': '0P0001P1UF.F', 'Qt': 36.0204, 'Env': 'AV 4d', 'Nom': 'Carmignac 2027 (4d)'},
-    {'Ticker': 'FR0007054358', 'Qt': 8.6056, 'Env': 'AV 4d', 'Nom': 'Amundi Stoxx 50'}
+    {'Ticker': 'FR0011550185', 'Qt': 607.1548, 'PRU': 27.87, 'Env': 'AV 4d', 'Nom': 'BNP S&P 500 (4d)'},
+    {'Ticker': '0P0001P1UF.F', 'Qt': 36.0204, 'PRU': 109.49, 'Env': 'AV 4d', 'Nom': 'Carmignac 2027 (4d)'},
+    {'Ticker': 'FR0007054358', 'Qt': 8.6056, 'PRU': 49.40, 'Env': 'AV 4d', 'Nom': 'Amundi Stoxx 50'}
 ]
 
-# --- 2. INTERFACE UTILISATEUR ---
-st.title("🏦 Suivi du Patrimoine Global")
-
-period_choice = st.select_slider(
-    "Choisir la période de visualisation :",
-    options=["1 Jour", "1 Semaine", "1 Mois", "Année en cours", "1 An"]
-)
-
-# Mapping pour Yahoo Finance
-period_map = {
-    "1 Jour": ("1d", "1m"),
-    "1 Semaine": ("5d", "30m"),
-    "1 Mois": ("1mo", "1d"),
-    "Année en cours": ("ytd", "1d"),
-    "1 An": ("1y", "1d")
-}
-y_period, y_interval = period_map[period_choice]
-
-# --- 3. CALCUL DU PATRIMOINE HISTORIQUE ---
-@st.cache_data(ttl=3600)
-def get_global_history(p, i):
-    hist_data = pd.DataFrame()
+# --- 2. RÉCUPÉRATION DES DONNÉES ---
+def get_live_data(asset):
+    if asset['Ticker'] == 'FIXED':
+        return asset['Val'], 0.0, 2.8  # Prix fixe, Var Jour 0, Var YTD estimée
     
-    for asset in assets:
-        if asset['Ticker'] == 'FIXED':
-            continue
-        try:
-            # Récupération des cours de clôture
-            s = yf.Ticker(asset['Ticker']).history(period=p, interval=i)['Close']
-            # Calcul de la valeur de la ligne (Cours * Quantité)
-            hist_data[asset['Nom']] = s * asset['Qt']
-        except:
-            pass
-            
-    # On ajoute le fonds Euro (fixe) et on somme tout
-    total_series = hist_data.sum(axis=1) + 12725.89
-    return total_series
+    try:
+        s = yf.Ticker(asset['Ticker'])
+        fast = s.fast_info
+        price = fast['last_price']
+        
+        # Variation Jour
+        v_jour = ((price - fast['previous_close']) / fast['previous_close']) * 100
+        
+        # Variation YTD (Année en cours 2026)
+        h = s.history(start="2026-01-01")
+        v_ytd = ((price - h['Close'].iloc[0]) / h['Close'].iloc[0]) * 100 if not h.empty else 0.0
+        
+        return price, v_jour, v_ytd
+    except:
+        return 0.0, 0.0, 0.0
+
+# --- 3. CALCULS ET AFFICHAGE ---
+st.title("🏦 Récapitulatif du Patrimoine Global")
 
 try:
-    with st.spinner('Mise à jour des cours en direct...'):
-        history = get_global_history(y_period, y_interval)
-        df_plot = history.reset_index()
-        df_plot.columns = ['Date', 'Valeur']
-        
-        # Métriques de performance
-        val_actuelle = df_plot['Valeur'].iloc[-1]
-        val_debut = df_plot['Valeur'].iloc[0]
-        variation = val_actuelle - val_debut
-        variation_pct = (variation / val_debut) * 100
+    with st.spinner('Actualisation des cours...'):
+        results = []
+        for a in assets:
+            p, vj, vy = get_live_data(a)
+            val_totale = p * a['Qt']
+            pv = val_totale - (a['PRU'] * a['Qt'])
+            perf_globale = (pv / (a['PRU'] * a['Qt'])) * 100
+            
+            results.append({
+                'Nom': a['Nom'],
+                'Enveloppe': a['Env'],
+                'Prix Actuel': p,
+                'Valeur Totale': val_totale,
+                'Plus-Value': pv,
+                'Var. Jour': vj,
+                'Var. YTD': vy,
+                'Perf. Totale': perf_globale
+            })
 
-    # --- 4. AFFICHAGE DES INDICATEURS ---
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Valeur Totale", f"{val_actuelle:,.2f} €".replace(',', ' '))
-    col2.metric(f"Variation ({period_choice})", f"{variation:+,.2f} €".replace(',', ' '), delta=f"{variation_pct:.2f}%")
-    col3.metric("Dernière MAJ", df_plot['Date'].iloc[-1].strftime('%d/%m %H:%M'))
+        df = pd.DataFrame(results)
+        total_patrimoine = df['Valeur Totale'].sum()
+        total_pv = df['Plus-Value'].sum()
 
-    # --- 5. GRAPHIQUE D'ÉVOLUTION ---
-    fig = px.area(
-        df_plot, x='Date', y='Valeur',
-        title=f"Évolution de votre capital total ({period_choice})",
-        color_discrete_sequence=['#2ecc71']
-    )
-    
-    fig.update_layout(
-        hovermode="x unified",
-        yaxis_title="Montant (€)",
-        xaxis_title=None,
-        template="plotly_white"
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
+    # Métriques Haut de Page
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Patrimoine Global", f"{total_patrimoine:,.2f} €".replace(',', ' '))
+    m2.metric("Plus-Value Latente", f"{total_pv:,.2f} €".replace(',', ' '))
+    m3.metric("Performance Globale", f"{(total_pv / (total_patrimoine - total_pv) * 100):.2f} %")
 
-    # --- 6. RÉPARTITION ACTUELLE ---
     st.divider()
-    c1, c2 = st.columns(2)
-    
-    # Préparation des données pour les graphiques de répartition
-    current_values = []
-    for asset in assets:
-        if asset['Ticker'] == 'FIXED':
-            p = 1.0
-            v = asset['Val']
-        else:
-            p = yf.Ticker(asset['Ticker']).fast_info['last_price']
-            v = p * asset['Qt']
-        current_values.append({'Nom': asset['Nom'], 'Env': asset['Env'], 'Valeur': v})
-    
-    df_res = pd.DataFrame(current_values)
 
-    with c1:
-        st.subheader("Répartition par Enveloppe")
-        st.plotly_chart(px.pie(df_res, values='Valeur', names='Env', hole=0.4), use_container_width=True)
-    
-    with c2:
-        st.subheader("Répartition par Actif")
-        st.plotly_chart(px.pie(df_res, values='Valeur', names='Nom', hole=0.4), use_container_width=True)
+    # Affichage par enveloppe
+    def style_performance(v):
+        color = '#09ab3b' if v >= 0 else '#ff4b4b'
+        return f'color: {color}; font-weight: bold'
+
+    for env in df['Enveloppe'].unique():
+        st.subheader(f"📍 {env}")
+        sub_df = df[df['Enveloppe'] == env][['Nom', 'Valeur Totale', 'Plus-Value', 'Var. Jour', 'Var. YTD', 'Perf. Totale']]
+        
+        st.dataframe(
+            sub_df.style.applymap(style_performance, subset=['Var. Jour', 'Var. YTD', 'Perf. Totale'])
+            .format({
+                'Valeur Totale': '{:,.2f} €',
+                'Plus-Value': '{:,.2f} €',
+                'Var. Jour': '{:+.2f} %',
+                'Var. YTD': '{:+.2f} %',
+                'Perf. Totale': '{:+.2f} %'
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    st.caption(f"Dernière mise à jour : {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
 
 except Exception as e:
-    st.error(f"Erreur technique : {e}")
-    
+    st.error(f"Erreur lors de la mise à jour : {e}")
